@@ -1,0 +1,64 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "sh.simplepu/mcp",
+  "title": "Simplepush",
+  "description": "Send tasks and notifications to people's phones. Answers build a queryable knowledge base.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/simplepush/simplepush-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://simplepu.sh",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@simplepush/mcp",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SP_API_TOKEN",
+          "description": "Personal API token from the API Token screen in the Simplepush app. Set this or SP_INTEGRATION_TOKEN.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "SP_INTEGRATION_TOKEN",
+          "description": "Organization integration token from `sp integration create`. Set this or SP_API_TOKEN; unlocks member, topic and broadcast targeting and end-to-end encryption.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "SP_KEYS",
+          "description": "Personal encryption keys exported from the app, comma-separated: a bare base64 key is the Personal Password key, `topic=key` binds a key to one topic.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "SP_BASE_URL",
+          "description": "API origin.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "https://api.simplepu.sh"
+        },
+        {
+          "name": "SP_MAX_WAIT_SECONDS",
+          "description": "Ceiling on how long send_task may block waiting for answers.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "900"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.simplepu.sh/mcp"
+    }
+  ]
+}
