@@ -68,8 +68,8 @@ function targetFields(sp: Simplepush) {
       }
     : {
         topic: z.string().optional().describe("Deliver to this topic instead of the user's own devices. Omit for a self-send."),
-        member: z.string().optional().describe("Unavailable in personal mode — requires an org integration token."),
-        broadcast: z.boolean().optional().describe("Unavailable in personal mode — requires an org integration token."),
+        member: z.string().optional().describe("Unavailable in personal mode — requires an organization credential."),
+        broadcast: z.boolean().optional().describe("Unavailable in personal mode — requires an organization credential."),
       };
 }
 

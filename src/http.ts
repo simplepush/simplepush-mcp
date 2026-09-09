@@ -4,6 +4,8 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { toWebRequest } from "@modelcontextprotocol/node";
 import { Readable } from "node:stream";
 
+import { OrgClient } from "@simplepush/sdk";
+
 import { AuthError, PRM_PATH, authenticate, protectedResourceMetadata, requireScope } from "./auth.js";
 import { ConfigError, loadHttpConfig, type HttpConfig } from "./config.js";
 import { Simplepush } from "./simplepush.js";
@@ -61,11 +63,16 @@ export function main(): void {
     console.error(`[mcp] ${ctx.era} request`);
     const token = ctx.authInfo?.token;
     if (!token) throw new Error("unauthenticated request reached the MCP handler");
-    // Hosted = OAuth = personal or org-admin grants; integration tokens are
-    // for self-run servers and are not accepted here (introspection would
-    // reject them anyway).
+    // Hosted = OAuth. A grant approved by an organization admin acts for the
+    // whole organization (topics, members, broadcast; reads of the org record)
+    // but holds no keys, so it sends in the clear and leaves org ciphertext
+    // sealed. Any other grant is a personal user. Integration tokens are for
+    // self-run servers and are not accepted here (introspection rejects them).
+    const org = ctx.authInfo?.extra?.["accountType"] === "organization";
     const sp = new Simplepush({
-      mode: { kind: "personal", credential: { accessToken: token } },
+      mode: org
+        ? { kind: "org", client: new OrgClient({ bearerToken: token, baseUrl: config.baseUrl }) }
+        : { kind: "personal", credential: { accessToken: token } },
       baseUrl: config.baseUrl,
       maxWaitSeconds: config.maxWaitSeconds,
       pollIntervalMs: config.pollIntervalMs,
@@ -140,6 +147,7 @@ export function main(): void {
             clientId: principal.subject ?? "unknown",
             scopes: [...principal.scopes],
             resource: new URL(config.canonicalUri),
+            extra: { accountType: principal.accountType },
           },
         });
 

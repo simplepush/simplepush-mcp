@@ -15,6 +15,9 @@ export type Principal = {
   accessToken: string;
   scopes: Set<string>;
   subject: string | undefined;
+  /** Which account the grant was approved for on the consent page: a personal
+   * user (API token) or an organization (admin sign-in). */
+  accountType: "user" | "organization" | undefined;
 };
 
 export class AuthError extends Error {
@@ -127,6 +130,7 @@ export async function authenticate(
     accessToken: token,
     scopes: new Set((intro.scope ?? "").split(/\s+/).filter(Boolean)),
     subject: intro.sub,
+    accountType: intro.account_type === "organization" || intro.account_type === "user" ? intro.account_type : undefined,
   };
 }
 

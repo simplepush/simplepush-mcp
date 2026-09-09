@@ -173,7 +173,7 @@ export class Simplepush {
       if (set !== 1) throw new Error("An org send needs exactly one target: topic, member, or broadcast.");
     } else {
       if (target.member !== undefined || target.broadcast) {
-        throw new Error("member/broadcast targeting needs an org integration token; this server runs as a personal user.");
+        throw new Error("member/broadcast targeting needs an organization credential (an integration token, or the hosted connector signed in as an organization admin); this server runs as a personal user.");
       }
     }
   }
