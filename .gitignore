@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.log
 target/
+
+# local retrieval-eval seeder and generated worlds
+eval/
