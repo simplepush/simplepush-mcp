@@ -194,6 +194,11 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
         input: notificationInputSchema.optional().describe("One input shown on the notification: free text, a choice, or action buttons."),
         image_url: z.string().url().optional().describe("Public https URL of an image shown with the notification."),
         audio_url: z.string().url().optional().describe("Public https URL of an audio clip attached to the notification."),
+        link: z
+          .string()
+          .url()
+          .optional()
+          .describe("A URL shown as an \"Open link\" button on the notification. An https URL opens the browser; an app's deep link (for example unifi-protect://...) opens that app. Cannot be combined with `input`: the input's buttons take the button slots."),
         shared: z
           .boolean()
           .optional()
@@ -207,7 +212,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
           .describe("Default 0: return right after sending. With an input, wait this long for the answer (every recipient's, when there are several); on timeout the result marks who has not answered."),
       }),
     },
-    async ({ content, title, input, image_url, audio_url, shared, topic, member, broadcast, wait_seconds }) => {
+    async ({ content, title, input, image_url, audio_url, link, shared, topic, member, broadcast, wait_seconds }) => {
       try {
         const sent = await sp.sendNotification({
           content,
@@ -215,6 +220,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
           ...(input !== undefined ? { input } : {}),
           ...(image_url !== undefined ? { imageUrl: image_url } : {}),
           ...(audio_url !== undefined ? { audioUrl: audio_url } : {}),
+          ...(link !== undefined ? { link } : {}),
           ...(shared !== undefined ? { shared } : {}),
           ...(topic !== undefined ? { topic } : {}),
           ...(member !== undefined ? { member } : {}),
@@ -273,7 +279,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
           .optional()
           .describe("Default false: the task is a form — all inputs are submitted together with one Submit button. true: each input is submitted as it is filled."),
         markdown: z.boolean().optional().describe("Render `content` as Markdown."),
-        links: z.array(z.string().url()).optional().describe("Public https URLs attached to the task as links."),
+        links: z.array(z.string().url()).optional().describe("URLs attached to the task as links. The first one becomes an \"Open link\" button on the push when the task has no inline input. An https URL opens the browser; an app's deep link (for example unifi-protect://...) opens that app."),
         expires_at: z
           .string()
           .datetime({ offset: true })
@@ -339,7 +345,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
         reply: replyModeSchema.optional().describe("Open a comment thread on the subtask: `one-shot`, `sticky` or `one-time-per-user`."),
         auto_commit: z.boolean().optional().describe("Default false: one Submit for all inputs. true: each input is submitted as filled."),
         markdown: z.boolean().optional().describe("Render `content` as Markdown."),
-        links: z.array(z.string().url()).optional().describe("Public https URLs attached as links."),
+        links: z.array(z.string().url()).optional().describe("URLs attached as links (https or an app's deep link scheme)."),
         instances: z
           .array(z.string().min(1))
           .min(1)

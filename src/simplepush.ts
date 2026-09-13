@@ -186,12 +186,13 @@ export class Simplepush {
       input?: NotificationInput;
       imageUrl?: string;
       audioUrl?: string;
+      link?: string;
       shared?: boolean;
       /** Seconds to poll for the input answer(s); 0 returns right after sending. */
       waitSeconds?: number;
     } & Target,
   ): Promise<NotificationSendResult> {
-    const { content, title, input, imageUrl, audioUrl, shared, waitSeconds = 0, ...target } = opts;
+    const { content, title, input, imageUrl, audioUrl, link, shared, waitSeconds = 0, ...target } = opts;
     this.checkTarget(target);
     const resolvedInput: NotificationInput | undefined = input;
     const body = {
@@ -200,6 +201,7 @@ export class Simplepush {
       ...(resolvedInput !== undefined ? { input: resolvedInput } : {}),
       ...(imageUrl !== undefined ? { image: imageUrl } : {}),
       ...(audioUrl !== undefined ? { audio: audioUrl } : {}),
+      ...(link !== undefined ? { link } : {}),
     };
     // The SDK overloads discriminate on the target shape, so the cases are
     // separate calls. `shared: true` keeps a multi-recipient send ONE
