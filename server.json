@@ -3,7 +3,7 @@
   "name": "sh.simplepu/mcp",
   "title": "Simplepush",
   "description": "Send tasks and notifications to people's phones. Answers build a queryable knowledge base.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/simplepush/simplepush-mcp",
     "source": "github"
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@simplepush/mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
