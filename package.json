@@ -6,6 +6,7 @@
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "bin": {
+    "mcp": "./dist/index.mjs",
     "simplepush-mcp": "./dist/index.mjs",
     "simplepush-mcp-http": "./dist/http.mjs"
   },
