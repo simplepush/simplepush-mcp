@@ -9,7 +9,7 @@
  * opaque `cursor` the model hands back to continue.
  */
 import type { Simplepush } from "./simplepush.js";
-import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type SearchKind, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
+import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type Event, type SearchKind, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
 
 type ActorWire = { publicId: string; name?: string; deviceName?: string };
 type SubmissionWire = {
@@ -192,7 +192,7 @@ export async function queryEvents(sp: Simplepush, args: QueryEventsArgs): Promis
       type: e.eventType,
       createdAt: e.createdAt,
       ...(by !== undefined ? { by } : {}),
-      data: trim(d.value),
+      data: trim((d.value as Event).data),
     });
   }
   return {
