@@ -17,10 +17,104 @@ type SubmissionWire = {
   photo?: FileWire;
   file?: FileWire;
   audio?: FileWire & { durationSeconds?: number };
-  location?: unknown;
+  location?: LocationWire;
   createdAt: string;
 };
 type FileWire = { id: string; contentType?: string; size?: number; filename?: string };
+
+// --- result shapes ---
+
+/** A person as every tool names one: the stable `usr_` handle to filter or
+ * cross-reference by, plus the display name when there is one. */
+type Person = { publicId: string; name?: string };
+
+type FileRef = { id: string; contentType?: string; size?: number; filename?: string };
+
+/** A location answer after decryption: the coordinates, or only the
+ * `encrypted` blob when no held key opens it. */
+type LocationWire =
+  | { latitude: number; longitude: number; accuracy?: number; altitude?: number; heading?: number; speed?: number; timestamp?: number }
+  | { encrypted: string };
+
+/** The tail every page result carries: the window start when the tool chose
+ * it, the cursor to continue with, and the ciphertext note. */
+type PageTail = { since?: string; cursor?: string; note?: string };
+
+/** One task as the index shows it: what was asked of whom and its state,
+ * never the content. */
+type TaskView = {
+  taskId: string;
+  title?: string;
+  tag?: string;
+  status: TaskStatus;
+  topic?: string;
+  createdAt: string;
+  expiresAt?: string;
+  recipients: Person[];
+  inputs?: string[];
+  attachments?: string[];
+  reply?: TaskSummary["reply"];
+  subtasks?: Record<string, number>;
+  groupId?: string;
+  topicId?: string;
+};
+export type TasksResult = { tasks: TaskView[] } & PageTail;
+
+/** A stored task or subtask payload after decryption and `trim`, passed
+ * through as JSON: the field shapes are the backend's, not restated here. */
+type Payload = Record<string, unknown>;
+export type TaskChainView = {
+  task: Payload & { createdAt: string };
+  recipients: Person[];
+  subtasks?: (Payload & { createdAt: string })[];
+  groupId?: string;
+  groupNote?: string;
+  note?: string;
+};
+
+export type GroupStatusView = { groupId: string; counts: Record<string, number>; tasks: TaskView[]; note?: string };
+
+/** One event: its envelope reduced to type, time and actor, plus the
+ * decrypted payload (whichever event type it is). */
+type EventView = { version?: number; type: string; createdAt?: string; by?: Person; data: unknown };
+export type EventsResult = { events: EventView[] } & PageTail;
+
+type SubmissionView = {
+  submissionId: string;
+  createdAt: string;
+  by?: Person;
+  text?: string;
+  photo?: FileRef;
+  file?: FileRef;
+  audio?: FileRef & { durationSeconds?: number };
+  location?: LocationWire;
+};
+export type SubmissionsResult = { submissions: SubmissionView[] } & PageTail;
+
+type SearchHitView = {
+  kind: SearchKind;
+  id: string;
+  title?: string;
+  by?: string;
+  createdAt: string;
+  snippet?: string;
+  location?: { latitude: number; longitude: number };
+  distanceMeters?: number;
+};
+export type SearchResult = { hits: SearchHitView[] };
+
+type Section = "answers" | "replies" | "declines" | "cancellations" | "expiries" | "other";
+export type ActivityView = {
+  member?: string;
+  since: string;
+  openTasks: TaskView[];
+  declinedTasks: TaskView[];
+  expiredTasks: TaskView[];
+  submissions: SubmissionView[];
+  more?: Record<string, string>;
+  moreNote?: string;
+  note?: string;
+} & Partial<Record<Section, EventView[]>>;
 
 // --- shaping ---
 
@@ -50,10 +144,6 @@ function trim(value: unknown): unknown {
   return value;
 }
 
-/** A person as every tool names one: the stable `usr_` handle to filter or
- * cross-reference by, plus the display name when there is one. */
-type Person = { publicId: string; name?: string };
-
 function person(p: { publicId: string; name?: string }): Person {
   return { publicId: p.publicId, ...(p.name !== undefined ? { name: p.name } : {}) };
 }
@@ -75,10 +165,10 @@ function undecryptableNote(count: number): { note?: string } {
   return count > 0 ? { note: `${count} value(s) are encrypted under a key this server does not hold and were left as ciphertext.` } : {};
 }
 
-async function shapeSummary(sp: Simplepush, t: TaskSummary): Promise<{ summary: Record<string, unknown>; undecryptable: number }> {
+async function shapeSummary(sp: Simplepush, t: TaskSummary): Promise<{ summary: TaskView; undecryptable: number }> {
   const dec = await decryptTaskSummary(t, await sp.keyring());
   const row = dec.value as TaskSummary;
-  const summary: Record<string, unknown> = {
+  const summary: TaskView = {
     taskId: t.taskId,
     ...(row.title !== undefined ? { title: row.title } : {}),
     ...(row.tag !== undefined ? { tag: row.tag } : {}),
@@ -97,9 +187,9 @@ async function shapeSummary(sp: Simplepush, t: TaskSummary): Promise<{ summary: 
   return { summary, undecryptable: dec.undecryptable };
 }
 
-async function shapeSummaries(sp: Simplepush, tasks: TaskSummary[]): Promise<{ tasks: Record<string, unknown>[]; undecryptable: number }> {
+async function shapeSummaries(sp: Simplepush, tasks: TaskSummary[]): Promise<{ tasks: TaskView[]; undecryptable: number }> {
   let undecryptable = 0;
-  const shaped: Record<string, unknown>[] = [];
+  const shaped: TaskView[] = [];
   for (const t of tasks) {
     const r = await shapeSummary(sp, t);
     shaped.push(r.summary);
@@ -121,7 +211,7 @@ export type QueryTasksArgs = {
   cursor?: string;
 };
 
-export async function queryTasks(sp: Simplepush, args: QueryTasksArgs): Promise<Record<string, unknown>> {
+export async function queryTasks(sp: Simplepush, args: QueryTasksArgs): Promise<TasksResult> {
   const page = await sp.client.listTasks({
       status: args.status as TaskStatus[] | undefined,
       since: args.since,
@@ -136,18 +226,18 @@ export async function queryTasks(sp: Simplepush, args: QueryTasksArgs): Promise<
   return { tasks, ...(page.nextCursor !== undefined ? { cursor: page.nextCursor } : {}), ...undecryptableNote(undecryptable) };
 }
 
-export async function getTask(sp: Simplepush, taskId: string): Promise<Record<string, unknown>> {
+export async function getTask(sp: Simplepush, taskId: string): Promise<TaskChainView> {
   const chain = await sp.client.getTaskChain(taskId);
   const root = await decryptTaskPayload(chain.task, await sp.keyring());
   let undecryptable = root.undecryptable;
-  const subtasks: unknown[] = [];
+  const subtasks: TaskChainView["subtasks"] = [];
   for (const s of chain.subtasks) {
     const d = await decryptTaskPayload(s.subtask, await sp.keyring());
     undecryptable += d.undecryptable;
-    subtasks.push({ ...(trim(d.value) as Record<string, unknown>), createdAt: s.createdAt });
+    subtasks.push({ ...(trim(d.value) as Payload), createdAt: s.createdAt });
   }
   return {
-    task: { ...(trim(root.value) as Record<string, unknown>), createdAt: chain.createdAt },
+    task: { ...(trim(root.value) as Payload), createdAt: chain.createdAt },
     recipients: recipientRefs(chain.recipients),
     ...(subtasks.length > 0 ? { subtasks } : {}),
     ...(chain.groupId !== undefined ? { groupId: chain.groupId, groupNote: "sent to several people as a group; see get_group_status for the other recipients" } : {}),
@@ -155,7 +245,7 @@ export async function getTask(sp: Simplepush, taskId: string): Promise<Record<st
   };
 }
 
-export async function getGroupStatus(sp: Simplepush, groupId: string, status?: string[]): Promise<Record<string, unknown>> {
+export async function getGroupStatus(sp: Simplepush, groupId: string, status?: string[]): Promise<GroupStatusView> {
   const group = await sp.client.getTaskGroup(groupId, { status: status as TaskStatus[] | undefined });
   const { tasks, undecryptable } = await shapeSummaries(sp, group.tasks);
   const counts: Record<string, number> = {};
@@ -172,7 +262,7 @@ export type QueryEventsArgs = {
   cursor?: string;
 };
 
-export async function queryEvents(sp: Simplepush, args: QueryEventsArgs): Promise<Record<string, unknown>> {
+export async function queryEvents(sp: Simplepush, args: QueryEventsArgs): Promise<EventsResult> {
   // No window and no cursor means "recent", not "everything since the org
   // was created" — the default window keeps a bare call bounded.
   const since = args.since ?? (args.cursor === undefined ? daysAgo(DEFAULT_WINDOW_DAYS) : undefined);
@@ -185,7 +275,7 @@ export async function queryEvents(sp: Simplepush, args: QueryEventsArgs): Promis
       cursor: args.cursor,
     });
   let undecryptable = 0;
-  const events: unknown[] = [];
+  const events: EventView[] = [];
   for (const e of page.events) {
     const d = await decryptEvent(e, await sp.keyring());
     undecryptable += d.undecryptable;
@@ -213,7 +303,7 @@ export type QuerySubmissionsArgs = {
   cursor?: string;
 };
 
-export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArgs): Promise<Record<string, unknown>> {
+export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArgs): Promise<SubmissionsResult> {
   const since = args.since ?? (args.cursor === undefined ? daysAgo(DEFAULT_WINDOW_DAYS) : undefined);
   const page = await sp.client.listSubmissions({
       since,
@@ -223,7 +313,7 @@ export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArg
       cursor: args.cursor,
     });
   let undecryptable = 0;
-  const submissions: unknown[] = [];
+  const submissions: SubmissionView[] = [];
   for (const entry of page.submissions) {
     const d = await decryptSubmission(entry.submission, await sp.keyring(), entry.encryption);
     undecryptable += d.undecryptable;
@@ -236,7 +326,7 @@ export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArg
       ...(s.photo ? { photo: fileRef(s.photo) } : {}),
       ...(s.file ? { file: fileRef(s.file) } : {}),
       ...(s.audio ? { audio: { ...fileRef(s.audio), ...(s.audio.durationSeconds !== undefined ? { durationSeconds: s.audio.durationSeconds } : {}) } } : {}),
-      ...(s.location !== undefined ? { location: trim(s.location) } : {}),
+      ...(s.location !== undefined ? { location: trim(s.location) as LocationWire } : {}),
     });
   }
   return {
@@ -263,7 +353,7 @@ const SEARCH_PAGE = 20;
 
 /** Ranked hits with the id to follow up on: tsk_/sub_ -> get_task, ntf_ ->
  * get_notification_answer, sbm_ -> query_submissions. */
-export async function searchKnowledge(sp: Simplepush, args: SearchArgs): Promise<Record<string, unknown>> {
+export async function searchKnowledge(sp: Simplepush, args: SearchArgs): Promise<SearchResult> {
   const res = await sp.client.search(args.query, {
     ...(args.center !== undefined ? { near: args.center, radiusMeters: args.radius_meters } : {}),
     ...(args.area_points !== undefined ? { within: args.area_points } : {}),
@@ -291,7 +381,7 @@ export async function searchKnowledge(sp: Simplepush, args: SearchArgs): Promise
   };
 }
 
-function fileRef(f: FileWire): Record<string, unknown> {
+function fileRef(f: FileWire): FileRef {
   return {
     id: f.id,
     ...(f.contentType !== undefined ? { contentType: f.contentType } : {}),
@@ -339,7 +429,7 @@ export async function downloadAttachment(sp: Simplepush, { scopeId, fileId }: Do
 
 /** Which section of an activity bundle an event belongs to. Submissions are
  * fetched through their own endpoint, so SubmissionCreated is skipped here. */
-const EVENT_SECTIONS: Record<string, string> = {
+const EVENT_SECTIONS: Record<string, Section> = {
   TaskCompleted: "answers",
   TaskInputCompleted: "answers",
   SubtaskCompleted: "answers",
@@ -361,7 +451,7 @@ export type ActivityArgs = { member?: string; since?: string };
  * declined or expired, and the window's answers, replies, declines,
  * cancellations and ad-hoc submissions. Composes the single-purpose queries
  * so the model does not have to plan the fan-out itself. */
-export async function getActivity(sp: Simplepush, args: ActivityArgs): Promise<Record<string, unknown>> {
+export async function getActivity(sp: Simplepush, args: ActivityArgs): Promise<ActivityView> {
   const since = args.since ?? daysAgo(DEFAULT_WINDOW_DAYS);
   const [open, closed, events, submissions] = await Promise.all([
     queryTasks(sp, { status: ["pending"], member: args.member, limit: TASKS_PAGE }),
@@ -370,30 +460,26 @@ export async function getActivity(sp: Simplepush, args: ActivityArgs): Promise<R
     querySubmissions(sp, { member: args.member, since, limit: TASKS_PAGE }),
   ]);
 
-  const openTasks = open.tasks as Record<string, unknown>[];
-  const closedTasks = closed.tasks as Record<string, unknown>[];
-
-  const sections: Record<string, unknown[]> = {};
-  for (const e of events.events as Record<string, unknown>[]) {
-    const type = e.type as string;
-    if (type === "SubmissionCreated") continue;
-    const section = EVENT_SECTIONS[type] ?? "other";
+  const sections: Partial<Record<Section, EventView[]>> = {};
+  for (const e of events.events) {
+    if (e.type === "SubmissionCreated") continue;
+    const section = EVENT_SECTIONS[e.type] ?? "other";
     (sections[section] ??= []).push(e);
   }
 
   const more: Record<string, string> = {};
-  if (typeof open.cursor === "string") more.openTasks = open.cursor;
-  if (typeof events.cursor === "string") more.events = events.cursor;
-  if (typeof submissions.cursor === "string") more.submissions = submissions.cursor;
+  if (open.cursor !== undefined) more.openTasks = open.cursor;
+  if (events.cursor !== undefined) more.events = events.cursor;
+  if (submissions.cursor !== undefined) more.submissions = submissions.cursor;
 
-  const notes = [open.note, closed.note, events.note, submissions.note].filter((n): n is string => typeof n === "string");
+  const notes = [open.note, closed.note, events.note, submissions.note].filter((n): n is string => n !== undefined);
 
   return {
     ...(args.member !== undefined ? { member: args.member } : {}),
     since,
-    openTasks,
-    declinedTasks: closedTasks.filter((t) => t.status === "declined"),
-    expiredTasks: closedTasks.filter((t) => t.status === "expired"),
+    openTasks: open.tasks,
+    declinedTasks: closed.tasks.filter((t) => t.status === "declined"),
+    expiredTasks: closed.tasks.filter((t) => t.status === "expired"),
     ...sections,
     submissions: submissions.submissions,
     ...(Object.keys(more).length > 0
