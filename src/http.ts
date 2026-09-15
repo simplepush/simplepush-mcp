@@ -10,29 +10,10 @@ import { AuthError, PRM_PATH, authenticate, protectedResourceMetadata, requireSc
 import { ConfigError, loadHttpConfig, type HttpConfig } from "./config.js";
 import { Simplepush } from "./simplepush.js";
 import { status } from "./status.js";
-import { buildServer } from "./tools.js";
+import { TOOL_SCOPES, buildServer } from "./tools.js";
 
 const MCP_PATH = "/mcp";
 
-/** The scope each tool needs, so an insufficient grant is refused at the HTTP
- * layer with a challenge naming what to re-request. The backend enforces scopes
- * too, but its error cannot carry a `WWW-Authenticate` header. */
-const TOOL_SCOPES: Record<string, string> = {
-  send_notification: "send",
-  send_task: "send",
-  append_subtask: "send",
-  cancel_task: "send",
-  get_task_answer: "read",
-  get_notification_answer: "read",
-  query_tasks: "read",
-  get_task: "read",
-  get_group_status: "read",
-  query_events: "read",
-  query_submissions: "read",
-  search_knowledge: "read",
-  get_activity: "read",
-  download_attachment: "files:read",
-};
 
 function json(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   const payload = JSON.stringify(body);
@@ -77,7 +58,9 @@ export function main(): void {
       maxWaitSeconds: config.maxWaitSeconds,
       pollIntervalMs: config.pollIntervalMs,
     });
-    return buildServer(sp, config);
+    // What the grant covers is what gets listed; the per-request scope check
+    // above still guards a direct call for an unlisted tool.
+    return buildServer(sp, config, new Set(ctx.authInfo?.scopes ?? []));
   });
 
 

@@ -19,8 +19,15 @@ export type SharedConfig = {
   pollIntervalMs: number;
 };
 
+/** The scope codes a tool can require; what SP_SCOPES may name. */
+export const SCOPE_CODES = ["send", "read", "files:read"] as const;
+
 export type StdioConfig =
   | (SharedConfig & {
+      /** SP_SCOPES: list only the tools these scopes cover. A listing trim,
+       * not an authorization boundary: the backend still treats the
+       * credential as whatever it was minted with. */
+      scopes?: ReadonlySet<string>;
       kind: "personal";
       apiToken: string;
       /** Personal keys exported from the app, for encrypted sends. See
@@ -28,6 +35,7 @@ export type StdioConfig =
       keys?: KeysConfig;
     })
   | (SharedConfig & {
+      scopes?: ReadonlySet<string>;
       kind: "org";
       /** The full `spi_<credential>.<seed>` token; the SDK splits it and the
        * seed never sits in more places than necessary. */
@@ -68,6 +76,22 @@ function shared(env: NodeJS.ProcessEnv): SharedConfig {
   };
 }
 
+/** Parses `SP_SCOPES`, a space- or comma-separated list of scope codes:
+ *
+ *   SP_SCOPES="read files:read"   # the query and download tools only
+ *   SP_SCOPES=read                # the query tools only
+ */
+function parseScopes(env: NodeJS.ProcessEnv): ReadonlySet<string> | undefined {
+  const raw = env.SP_SCOPES?.trim();
+  if (!raw) return undefined;
+  const codes = raw.split(/[\s,]+/).filter(Boolean);
+  const unknown = codes.filter((c) => !(SCOPE_CODES as readonly string[]).includes(c));
+  if (unknown.length > 0) {
+    throw new ConfigError(`SP_SCOPES names unknown scope(s) ${unknown.join(", ")}; the scopes are ${SCOPE_CODES.join(", ")}`);
+  }
+  return new Set(codes);
+}
+
 /** Parses `SP_KEYS` into the SDK's `keys` config.
  *
  * Format is a comma-separated list where a bare base64 key is the Personal
@@ -93,6 +117,11 @@ function parseKeys(env: NodeJS.ProcessEnv): KeysConfig | undefined {
   return entries;
 }
 
+function scopesEntry(env: NodeJS.ProcessEnv): { scopes?: ReadonlySet<string> } {
+  const scopes = parseScopes(env);
+  return scopes !== undefined ? { scopes } : {};
+}
+
 export function loadStdioConfig(env: NodeJS.ProcessEnv = process.env): StdioConfig {
   const apiToken = env.SP_API_TOKEN?.trim();
   const integrationToken = env.SP_INTEGRATION_TOKEN?.trim();
@@ -106,7 +135,7 @@ export function loadStdioConfig(env: NodeJS.ProcessEnv = process.env): StdioConf
     if (apiToken) {
       console.error("both SP_INTEGRATION_TOKEN and SP_API_TOKEN are set — using the integration token (org mode)");
     }
-    return { ...shared(env), kind: "org", integrationToken };
+    return { ...shared(env), ...scopesEntry(env), kind: "org", integrationToken };
   }
   if (!apiToken) {
     throw new ConfigError(
@@ -115,7 +144,7 @@ export function loadStdioConfig(env: NodeJS.ProcessEnv = process.env): StdioConf
     );
   }
   const keys = parseKeys(env);
-  return { ...shared(env), kind: "personal", apiToken, ...(keys !== undefined ? { keys } : {}) };
+  return { ...shared(env), ...scopesEntry(env), kind: "personal", apiToken, ...(keys !== undefined ? { keys } : {}) };
 }
 
 export function loadHttpConfig(env: NodeJS.ProcessEnv = process.env): HttpConfig {

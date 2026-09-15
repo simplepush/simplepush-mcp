@@ -3,7 +3,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { ConfigError, loadStdioConfig } from "./config.js";
 import { OrgClient } from "@simplepush/sdk";
 import { Simplepush, type Mode } from "./simplepush.js";
-import { buildServer } from "./tools.js";
+import { buildServer, toolsFor } from "./tools.js";
 
 async function resolveMode(config: ReturnType<typeof loadStdioConfig>): Promise<Mode> {
   if (config.kind === "personal") {
@@ -36,7 +36,14 @@ async function main(): Promise<void> {
     pollIntervalMs: config.pollIntervalMs,
   });
 
-  const handle = serveStdio(() => buildServer(sp, config));
+  // Only the tools the grant covers are listed. An integration token reports
+  // the scopes it was minted with; a personal token has none, so every tool.
+  // SP_SCOPES narrows either: what is configured AND (where known) minted.
+  const minted = mode.kind === "org" ? mode.client.scopes : undefined;
+  const granted =
+    config.scopes === undefined ? minted : minted === undefined ? config.scopes : new Set([...config.scopes].filter((s) => minted.has(s)));
+  if (granted !== undefined) console.error(`tools listed for scopes [${[...granted].join(", ")}]: ${toolsFor(granted).join(", ")}`);
+  const handle = serveStdio(() => buildServer(sp, config, granted));
 
   // stdout is the protocol channel — anything written there that is not a
   // JSON-RPC message corrupts the session. Diagnostics go to stderr, which is

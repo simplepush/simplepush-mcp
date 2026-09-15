@@ -65,7 +65,7 @@ sp integration create
 claude mcp add simplepush --env SP_INTEGRATION_TOKEN=spi_... -- npx -y @simplepush/mcp
 ```
 
-Org mode unlocks full targeting: every send takes exactly one of `topic`, `member` (name or `usr_` id), or `broadcast`. If the org has encryption enabled, the token's second half unwraps the org master keys at startup and all sends are end-to-end encrypted; answers are decrypted the same way.
+Org mode unlocks full targeting: every send takes exactly one of `topic`, `member` (name or `usr_` id), or `broadcast`. Only the tools the token's scopes cover are listed: a token minted with `read files:read` exposes the query and download tools and none of the send tools, which keeps the tool schemas a read-only agent carries per request to a minimum. If the org has encryption enabled, the token's second half unwraps the org master keys at startup and all sends are end-to-end encrypted; answers are decrypted the same way.
 
 If both credentials are set, the integration token wins and a note goes to stderr. MCP clients spawn stdio servers with your shell environment attached, so an exported `SP_API_TOKEN` from unrelated CLI work rides along; setting `SP_INTEGRATION_TOKEN` is always deliberate.
 
@@ -79,6 +79,7 @@ If both credentials are set, the integration token wins and a note goes to stder
 | `SP_BASE_URL` | `https://api.simplepu.sh` | API origin. Point at `http://localhost:8000` for local development. |
 | `SP_MAX_WAIT_SECONDS` | `900` | Ceiling on how long `send_task` may block. Per-call `wait_seconds` is clamped to it. |
 | `SP_POLL_INTERVAL_MS` | `2000` | Gap between answer polls while blocking. |
+| `SP_SCOPES` | unset | Space- or comma-separated scope codes (`send`, `read`, `files:read`); only the tools they cover are listed. Narrows an integration token's own scopes; the only way to trim the listing for a personal API token, which the backend always treats as full access. |
 
 ## Encryption
 
@@ -102,7 +103,7 @@ Keys only. There is no `SP_PASSWORD`.
 
 ## Hosted HTTP transport
 
-`simplepush-mcp-http` serves the same tools over Streamable HTTP as an OAuth resource server. No ambient credential: each request carries its own access token, verified by introspection against the authorization server and audience-checked against `SP_CANONICAL_URI`. Discovery metadata is served at `/.well-known/oauth-protected-resource`; the MCP endpoint is `/mcp`. `GET /status` is a public summary for uptime monitoring: 200 when the authorization server and the API both answer, 503 otherwise, with the same shape as the backend's `/v1/status`. Tool calls are scope-gated: `send` for `send_notification`, `send_task`, `append_subtask` and `cancel_task`, `read` for the answer and query tools, `files:read` for `download_attachment`.
+`simplepush-mcp-http` serves the same tools over Streamable HTTP as an OAuth resource server. No ambient credential: each request carries its own access token, verified by introspection against the authorization server and audience-checked against `SP_CANONICAL_URI`. Discovery metadata is served at `/.well-known/oauth-protected-resource`; the MCP endpoint is `/mcp`. `GET /status` is a public summary for uptime monitoring: 200 when the authorization server and the API both answer, 503 otherwise, with the same shape as the backend's `/v1/status`. Tools are scope-gated: `send` for `send_notification`, `send_task`, `append_subtask` and `cancel_task`, `read` for the answer and query tools, `files:read` for `download_attachment`. A grant lists only the tools its scopes cover; a direct call for anything else is refused with a challenge naming the missing scope.
 
 Hosted mode is personal OAuth grants only. Integration tokens are not accepted there by design, and hosted sends are plaintext: a server that could decrypt for you would not be end-to-end.
 

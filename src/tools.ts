@@ -164,7 +164,47 @@ const SERVER_INSTRUCTIONS = [
  * factory shape is v2's own idiom, and it happens to be exactly what the hosted
  * transport needs anyway: the credential differs per request, so nothing may be
  * shared between them. */
-export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
+/** The scope each tool needs. A credential's grant decides what is LISTED: a
+ * tool its scopes do not cover is not registered at all, so a read-only
+ * integration never carries the send tools' schemas (and the model never
+ * chooses one only to be refused). The HTTP transport refuses a direct call
+ * for a missing scope with a challenge as well, and the backend enforces
+ * scopes regardless. */
+export const TOOL_SCOPES: Record<string, string> = {
+  send_notification: "send",
+  send_task: "send",
+  append_subtask: "send",
+  cancel_task: "send",
+  get_task_answer: "read",
+  get_notification_answer: "read",
+  query_tasks: "read",
+  get_task: "read",
+  get_group_status: "read",
+  query_events: "read",
+  query_submissions: "read",
+  search_knowledge: "read",
+  get_activity: "read",
+  download_attachment: "files:read",
+};
+
+/** The tools of TOOL_SCOPES a grant covers; every tool when the grant is unknown. */
+export function toolsFor(granted: ReadonlySet<string> | undefined): string[] {
+  return Object.entries(TOOL_SCOPES)
+    .filter(([, scope]) => granted === undefined || granted.has(scope))
+    .map(([name]) => name);
+}
+
+/** `server.registerTool` that skips tools outside the grant. */
+function gatedRegister(server: McpServer, granted: ReadonlySet<string> | undefined): McpServer["registerTool"] {
+  const listed = new Set(toolsFor(granted));
+  const raw = server.registerTool.bind(server) as unknown as (...args: unknown[]) => unknown;
+  return ((name: string, ...rest: unknown[]) => (listed.has(name) ? raw(name, ...rest) : undefined)) as unknown as McpServer["registerTool"];
+}
+
+/** `granted` is the credential's scope set when it is known (an integration
+ * token, an OAuth principal); undefined lists every tool (a personal API token
+ * has no scopes). */
+export function buildServer(sp: Simplepush, config: SharedConfig, granted?: ReadonlySet<string>): McpServer {
   const server = new McpServer(
     { name: "simplepush", version: "0.1.0" },
     {
@@ -176,7 +216,9 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  const registerTool = gatedRegister(server, granted);
+
+  registerTool(
     "send_notification",
     {
       title: "Send a push notification",
@@ -246,7 +288,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "send_task",
     {
       title: "Send a task (a question, form or checklist item that needs an answer)",
@@ -325,7 +367,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "append_subtask",
     {
       title: "Append a subtask to an earlier task",
@@ -374,7 +416,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "cancel_task",
     {
       title: "Cancel a task, subtask or group",
@@ -408,7 +450,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_task_answer",
     {
       title: "Get the answer to an earlier task",
@@ -435,7 +477,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_notification_answer",
     {
       title: "Get the pick on an earlier notification",
@@ -473,7 +515,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     cursor: z.string().optional().describe("Continue a previous page: pass the `cursor` it returned."),
   };
 
-  server.registerTool(
+  registerTool(
     "query_tasks",
     {
       title: "List the organization's tasks",
@@ -501,7 +543,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_task",
     {
       title: "Read one task with its subtasks",
@@ -524,7 +566,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_group_status",
     {
       title: "Status of a task group",
@@ -545,7 +587,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "query_events",
     {
       title: "Read the organization's activity history",
@@ -571,7 +613,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "query_submissions",
     {
       title: "Read ad-hoc submissions from the field",
@@ -595,7 +637,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "search_knowledge",
     {
       title: "Search everything by words or by place",
@@ -647,7 +689,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_activity",
     {
       title: "Everything going on for a member (or the whole organization)",
@@ -670,7 +712,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig): McpServer {
     },
   );
 
-  server.registerTool(
+  registerTool(
     "download_attachment",
     {
       title: "Download a photo or file",
