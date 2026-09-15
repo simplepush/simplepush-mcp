@@ -11,7 +11,6 @@
 import type { Simplepush } from "./simplepush.js";
 import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type Event, type SearchKind, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
 
-type ActorWire = { publicId: string; name?: string; deviceName?: string };
 type SubmissionWire = {
   id: string;
   body?: { type: string; value?: string };
@@ -51,13 +50,16 @@ function trim(value: unknown): unknown {
   return value;
 }
 
-function who(actor: ActorWire | undefined): string | undefined {
-  if (!actor) return undefined;
-  return actor.name ?? actor.publicId;
+/** A person as every tool names one: the stable `usr_` handle to filter or
+ * cross-reference by, plus the display name when there is one. */
+type Person = { publicId: string; name?: string };
+
+function person(p: { publicId: string; name?: string }): Person {
+  return { publicId: p.publicId, ...(p.name !== undefined ? { name: p.name } : {}) };
 }
 
-function recipientNames(recipients: TaskSummary["recipients"]): string[] {
-  return recipients.map((r) => r.name ?? r.publicId);
+function recipientRefs(recipients: TaskSummary["recipients"]): Person[] {
+  return recipients.map(person);
 }
 
 function clampLimit(limit: number | undefined, fallback: number): number {
@@ -84,7 +86,7 @@ async function shapeSummary(sp: Simplepush, t: TaskSummary): Promise<{ summary: 
     ...(t.topic !== undefined ? { topic: t.topic } : {}),
     createdAt: t.createdAt,
     ...(t.expiresAt !== undefined ? { expiresAt: t.expiresAt } : {}),
-    recipients: recipientNames(t.recipients),
+    recipients: recipientRefs(t.recipients),
     ...(t.inputs.length > 0 ? { inputs: t.inputs } : {}),
     ...(t.attachments.length > 0 ? { attachments: t.attachments } : {}),
     ...(t.reply !== undefined ? { reply: t.reply } : {}),
@@ -146,6 +148,7 @@ export async function getTask(sp: Simplepush, taskId: string): Promise<Record<st
   }
   return {
     task: { ...(trim(root.value) as Record<string, unknown>), createdAt: chain.createdAt },
+    recipients: recipientRefs(chain.recipients),
     ...(subtasks.length > 0 ? { subtasks } : {}),
     ...(chain.groupId !== undefined ? { groupId: chain.groupId, groupNote: "sent to several people as a group; see get_group_status for the other recipients" } : {}),
     ...undecryptableNote(undecryptable),
@@ -186,12 +189,11 @@ export async function queryEvents(sp: Simplepush, args: QueryEventsArgs): Promis
   for (const e of page.events) {
     const d = await decryptEvent(e, await sp.keyring());
     undecryptable += d.undecryptable;
-    const by = who(e.actor);
     events.push({
       version: e.version,
       type: e.eventType,
       createdAt: e.createdAt,
-      ...(by !== undefined ? { by } : {}),
+      ...(e.actor !== undefined ? { by: person(e.actor) } : {}),
       data: trim((d.value as Event).data),
     });
   }
@@ -226,11 +228,10 @@ export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArg
     const d = await decryptSubmission(entry.submission, await sp.keyring(), entry.encryption);
     undecryptable += d.undecryptable;
     const s = d.value as SubmissionWire;
-    const by = who(entry.actor);
     submissions.push({
       submissionId: s.id,
       createdAt: s.createdAt,
-      ...(by !== undefined ? { by } : {}),
+      ...(entry.actor !== undefined ? { by: person(entry.actor) } : {}),
       ...(s.body?.value !== undefined ? { text: s.body.value } : {}),
       ...(s.photo ? { photo: fileRef(s.photo) } : {}),
       ...(s.file ? { file: fileRef(s.file) } : {}),

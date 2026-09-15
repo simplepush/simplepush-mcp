@@ -549,8 +549,8 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       title: "Read one task with its subtasks",
       description:
         "Answers 'what exactly was asked and answered on this task'. The full content of one task and every subtask " +
-        "appended to it: the questions, the answers given, replies, declines, and the uploads (inputId) and reply files (id) " +
-        "for download_attachment. Use after query_tasks or get_activity has identified the task. " +
+        "appended to it: who it was delivered to (recipients), the questions, the answers given, replies, declines, and the " +
+        "uploads (inputId) and reply files (id) for download_attachment. Use after query_tasks or get_activity has identified the task. " +
         "A task sent to several people carries its grptsk_ groupId — follow it with get_group_status for the other " +
         "recipients' copies.",
       inputSchema: z.object({
