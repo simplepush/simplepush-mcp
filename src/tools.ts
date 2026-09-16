@@ -520,6 +520,28 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
     .array(z.enum(["pending", "completed", "declined", "expired", "canceled"]))
     .optional()
     .describe("Only tasks in these states. Omit for all.");
+  /** The event wire names the backend accepts on the `type` filter, so a
+   * typo is rejected here with the list rather than by a bare backend 400. */
+  const EVENT_TYPES = [
+    "TaskCompleted",
+    "TaskInputUploaded",
+    "TaskInputCompleted",
+    "TaskDeletedByRecipient",
+    "TaskDeleted",
+    "TaskCanceled",
+    "TaskDeclinedByRecipient",
+    "TaskDeclined",
+    "TaskExpired",
+    "SubtaskCompleted",
+    "SubtaskInputUploaded",
+    "SubtaskInputCompleted",
+    "SubtaskCanceled",
+    "SubtaskDeclinedByRecipient",
+    "SubtaskDeclined",
+    "ReplyAppended",
+    "NotificationCompleted",
+    "SubmissionCreated",
+  ] as const;
   const windowFields = {
     since: z.string().optional().describe("ISO-8601 instant; only items created at or after this."),
     until: z.string().optional().describe("ISO-8601 instant; only items created at or before this."),
@@ -612,7 +634,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
         "SubtaskCompleted, ReplyAppended, SubmissionCreated, TaskDeclinedByRecipient, TaskCanceled, TaskExpired, ...). " +
         "For a ready-made bundle per member use get_activity; for ad-hoc reports alone use query_submissions.",
       inputSchema: z.object({
-        type: z.array(z.string().min(1)).optional().describe("Only these event types (wire names, e.g. TaskCompleted)."),
+        type: z.array(z.enum(EVENT_TYPES)).optional().describe("Only these event types."),
         ...windowFields,
         member: z.string().optional().describe("Only actions by this member (name or usr_ id)."),
         ...pageFields,
@@ -692,7 +714,16 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
         ...windowFields,
         member: z.string().optional().describe("Only units written by this person: a usr_ id, an org member's name, or on a personal account the name of someone in your own activity."),
         limit: z.number().int().positive().optional().describe("Best hits to return; default 20, at most 100."),
-      }),
+      })
+        // The backend rejects these pairings at decode time with a bare
+        // "Invalid value"; saying which field is missing keeps the model from
+        // guessing.
+        .refine((a) => a.center === undefined || a.radius_meters !== undefined, { message: "center requires radius_meters", path: ["radius_meters"] })
+        .refine((a) => a.radius_meters === undefined || a.center !== undefined, { message: "radius_meters requires center", path: ["center"] })
+        .refine((a) => a.area_points === undefined || (a.center === undefined && a.radius_meters === undefined), {
+          message: "area_points cannot be combined with center/radius_meters",
+          path: ["area_points"],
+        }),
     },
     async (args) => {
       try {
