@@ -9,18 +9,7 @@
  * opaque `cursor` the model hands back to continue.
  */
 import type { Simplepush } from "./simplepush.js";
-import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type SearchKind, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
-
-type SubmissionWire = {
-  id: string;
-  body?: { type: string; value?: string };
-  photo?: FileWire;
-  file?: FileWire;
-  audio?: FileWire & { durationSeconds?: number };
-  location?: LocationWire;
-  createdAt: string;
-};
-type FileWire = { id: string; contentType?: string; size?: number; filename?: string };
+import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type LocationWire, type SearchKind, type SubmissionFileWire, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
 
 // --- result shapes ---
 
@@ -29,12 +18,6 @@ type FileWire = { id: string; contentType?: string; size?: number; filename?: st
 type Person = { publicId: string; name?: string };
 
 type FileRef = { id: string; contentType?: string; size?: number; filename?: string };
-
-/** A location answer after decryption: the coordinates, or only the
- * `encrypted` blob when no held key opens it. */
-type LocationWire =
-  | { latitude: number; longitude: number; accuracy?: number; altitude?: number; heading?: number; speed?: number; timestamp?: number }
-  | { encrypted: string };
 
 /** The tail every page result carries: the window start when the tool chose
  * it, the cursor to continue with, and the ciphertext note. */
@@ -315,7 +298,7 @@ export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArg
   let undecryptable = 0;
   const submissions: SubmissionView[] = [];
   for (const entry of page.submissions) {
-    const d = await decryptSubmission(entry.submission as SubmissionWire, await sp.keyring(), entry.encryption);
+    const d = await decryptSubmission(entry.submission, await sp.keyring(), entry.encryption);
     undecryptable += d.undecryptable;
     const s = d.value;
     submissions.push({
@@ -381,7 +364,7 @@ export async function searchKnowledge(sp: Simplepush, args: SearchArgs): Promise
   };
 }
 
-function fileRef(f: FileWire): FileRef {
+function fileRef(f: SubmissionFileWire): FileRef {
   return {
     id: f.id,
     ...(f.contentType !== undefined ? { contentType: f.contentType } : {}),

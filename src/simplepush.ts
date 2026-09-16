@@ -1,4 +1,4 @@
-import { Client, Keyring, OrgClient, decryptEvent, decryptTaskPayload } from "@simplepush/sdk";
+import { Client, Keyring, OrgClient, decryptNotificationPayload, decryptTaskPayload } from "@simplepush/sdk";
 import { importKey } from "@simplepush/sdk";
 import type { CancelReason, DerivedKey, EncryptionMarker, Input, KeysConfig, NotificationInput, PersonalKeyInput, ReplyMode, SendOptions, SendSubtaskOptions } from "@simplepush/sdk";
 import { isSubtaskGroupResponse } from "@simplepush/sdk";
@@ -422,14 +422,10 @@ export class Simplepush {
   async getNotificationAnswer(notificationId: string): Promise<NotificationOutcome> {
     const payload = await this.client.getNotification(notificationId);
     if (payload.input === undefined) return { status: "delivered", notificationId };
-    if (payload.status !== "completed" || payload.reply === undefined) return { status: "pending", notificationId };
-    // The reply's sealed fields are the ones of a notificationCompleted event.
-    const { value, undecryptable } = await decryptEvent(
-      { encryption: payload.encryption, data: { type: "notificationCompleted", reply: payload.reply } },
-      await this.keyring(),
-    );
-    const reply = value.data.reply;
-    return { status: "answered", notificationId, answer: answerOf(reply), ...(undecryptable > 0 ? { undecryptable } : {}) };
+    const { reply } = payload;
+    if (payload.status !== "completed" || reply === undefined) return { status: "pending", notificationId };
+    const { value, undecryptable } = await decryptNotificationPayload({ ...payload, reply }, await this.keyring());
+    return { status: "answered", notificationId, answer: answerOf(value.reply), ...(undecryptable > 0 ? { undecryptable } : {}) };
   }
 
 }
