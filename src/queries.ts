@@ -9,7 +9,7 @@
  * opaque `cursor` the model hands back to continue.
  */
 import type { Simplepush } from "./simplepush.js";
-import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type Event, type SearchKind, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
+import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary, type EncryptionMarker, type SearchKind, type TaskStatus, type TaskSummary } from "@simplepush/sdk";
 
 type SubmissionWire = {
   id: string;
@@ -167,7 +167,7 @@ function undecryptableNote(count: number): { note?: string } {
 
 async function shapeSummary(sp: Simplepush, t: TaskSummary): Promise<{ summary: TaskView; undecryptable: number }> {
   const dec = await decryptTaskSummary(t, await sp.keyring());
-  const row = dec.value as TaskSummary;
+  const row = dec.value;
   const summary: TaskView = {
     taskId: t.taskId,
     ...(row.title !== undefined ? { title: row.title } : {}),
@@ -284,7 +284,7 @@ export async function queryEvents(sp: Simplepush, args: QueryEventsArgs): Promis
       type: e.eventType,
       createdAt: e.createdAt,
       ...(e.actor !== undefined ? { by: person(e.actor) } : {}),
-      data: trim((d.value as Event).data),
+      data: trim(d.value.data),
     });
   }
   return {
@@ -315,9 +315,9 @@ export async function querySubmissions(sp: Simplepush, args: QuerySubmissionsArg
   let undecryptable = 0;
   const submissions: SubmissionView[] = [];
   for (const entry of page.submissions) {
-    const d = await decryptSubmission(entry.submission, await sp.keyring(), entry.encryption);
+    const d = await decryptSubmission(entry.submission as SubmissionWire, await sp.keyring(), entry.encryption);
     undecryptable += d.undecryptable;
-    const s = d.value as SubmissionWire;
+    const s = d.value;
     submissions.push({
       submissionId: s.id,
       createdAt: s.createdAt,

@@ -428,7 +428,7 @@ export class Simplepush {
       { encryption: payload.encryption, data: { type: "notificationCompleted", reply: payload.reply } },
       await this.keyring(),
     );
-    const reply = (value as { data: { reply: Record<string, unknown> & { type: string } } }).data.reply;
+    const reply = value.data.reply;
     return { status: "answered", notificationId, answer: answerOf(reply), ...(undecryptable > 0 ? { undecryptable } : {}) };
   }
 
