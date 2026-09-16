@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 
 import type { SharedConfig } from "./config.js";
 import { downloadAttachment, getActivity, getGroupStatus, getTask, queryEvents, querySubmissions, queryTasks, searchKnowledge } from "./queries.js";
-import { failureText, type Simplepush } from "./simplepush.js";
+import { failureText, parseErrorBody, type Simplepush } from "./simplepush.js";
 import { DownloadError, HttpError, type Input } from "@simplepush/sdk";
 
 /** Default block before `send_task` gives up and hands back a task id. Short
@@ -18,6 +18,20 @@ function textResult(payload: unknown) {
 
 function errorResult(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
+}
+
+/** Error codes for a `member` / `topic` filter that names nobody or nothing. */
+const EMPTY_FILTER_CODES = new Set(["member_not_found", "org_topic_not_found", "topic_not_found"]);
+
+/** A filter that matches nothing is an empty answer, not a failure: the model
+ * should stop looking, and a client's failure counters should stay untouched.
+ * Returns the empty page with the backend's reason as the note, or undefined
+ * when the error is anything else. */
+function emptyFilterResult(err: unknown, empty: Record<string, unknown[]>) {
+  if (!(err instanceof HttpError) || err.status !== 404) return undefined;
+  const { code, msg } = parseErrorBody(err.body);
+  if (code === undefined || !EMPTY_FILTER_CODES.has(code)) return undefined;
+  return textResult({ ...empty, note: `${msg ?? "the filter matched nothing"}; nothing to report for this filter` });
 }
 
 function describe(err: unknown): string {
@@ -538,7 +552,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       try {
         return textResult(await queryTasks(sp, args));
       } catch (err) {
-        return errorResult(`Could not list tasks: ${describe(err)}`);
+        return emptyFilterResult(err, { tasks: [] }) ?? errorResult(`Could not list tasks: ${describe(err)}`);
       }
     },
   );
@@ -608,7 +622,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       try {
         return textResult(await queryEvents(sp, args));
       } catch (err) {
-        return errorResult(`Could not read events: ${describe(err)}`);
+        return emptyFilterResult(err, { events: [] }) ?? errorResult(`Could not read events: ${describe(err)}`);
       }
     },
   );
@@ -632,7 +646,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       try {
         return textResult(await querySubmissions(sp, args));
       } catch (err) {
-        return errorResult(`Could not read submissions: ${describe(err)}`);
+        return emptyFilterResult(err, { submissions: [] }) ?? errorResult(`Could not read submissions: ${describe(err)}`);
       }
     },
   );
@@ -684,7 +698,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       try {
         return textResult(await searchKnowledge(sp, args));
       } catch (err) {
-        return errorResult(`Could not search: ${describe(err)}`);
+        return emptyFilterResult(err, { hits: [] }) ?? errorResult(`Could not search: ${describe(err)}`);
       }
     },
   );
@@ -707,7 +721,10 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       try {
         return textResult(await getActivity(sp, args));
       } catch (err) {
-        return errorResult(`Could not gather activity: ${describe(err)}`);
+        return (
+          emptyFilterResult(err, { openTasks: [], declinedTasks: [], expiredTasks: [], submissions: [] }) ??
+          errorResult(`Could not gather activity: ${describe(err)}`)
+        );
       }
     },
   );

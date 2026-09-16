@@ -447,6 +447,17 @@ function answerOf(r: Record<string, unknown>): Answer {
 }
 
 /** HTTP failures as sentences a model can act on rather than bare statuses. */
+/** The backend's error body: `{"error": "<code>", "msg": "<detail>"}`; both
+ * absent when the body is not that JSON. */
+export function parseErrorBody(body: string): { code?: string; msg?: string } {
+  try {
+    const { error, msg } = JSON.parse(body) as { error?: unknown; msg?: unknown };
+    return { ...(typeof error === "string" ? { code: error } : {}), ...(typeof msg === "string" ? { msg } : {}) };
+  } catch {
+    return {};
+  }
+}
+
 export function failureText(status: number, body: string): string {
   switch (status) {
     case 401:
@@ -460,13 +471,7 @@ export function failureText(status: number, body: string): string {
     case 404: {
       // The backend's message often carries the actionable detail (e.g.
       // "no topic 'x' in this org"); keep it when it parses.
-      const msg = (() => {
-        try {
-          return (JSON.parse(body) as { msg?: string }).msg;
-        } catch {
-          return undefined;
-        }
-      })();
+      const { msg } = parseErrorBody(body);
       return msg !== undefined ? `Not found: ${msg}.` : "Not found. Check the id.";
     }
     default:
