@@ -10,6 +10,7 @@ import type {
   NotificationReplyWire,
   PersonalKeyInput,
   ReplyMode,
+  ReplyWire,
   SendOptions,
   SendSubtaskOptions,
   SubtaskPayloadWire,
@@ -17,6 +18,7 @@ import type {
   UploadWire,
 } from "@simplepush/sdk";
 import { isSubtaskGroupResponse } from "@simplepush/sdk";
+import { fileRef, person, type FileRef, type Person } from "./queries.js";
 
 /** Who this server acts as.
  *
@@ -55,6 +57,19 @@ export type Answer = {
   durationSeconds?: number;
 };
 
+/** One message on a task's reply thread. `by` is the author's handle only:
+ * the stored reply carries no name. Files carry the rfl_ id
+ * download_attachment takes as `file_id`. */
+export type ReplyView = {
+  id: string;
+  by: Person;
+  createdAt: string;
+  text?: string;
+  photo?: FileRef;
+  file?: FileRef;
+  audio?: FileRef & { durationSeconds?: number };
+};
+
 export type NotificationOutcome =
   | { status: "answered"; notificationId: string; answer: Answer; undecryptable?: number }
   | { status: "pending"; notificationId: string }
@@ -62,15 +77,18 @@ export type NotificationOutcome =
   | { status: "delivered"; notificationId: string };
 
 /** For a subtask, `taskId` is the parent's and `subtaskId` names the subtask. */
+/** A task is answered by its inputs or, when it has none, by its reply
+ * thread: the first reply answers it. A task with inputs AND a thread stays
+ * pending until the inputs are done; its replies are listed either way. */
 export type AskOutcome =
-  | { status: "answered"; taskId: string; subtaskId?: string; answers: Answer[]; undecryptable?: number; appendToken?: string }
-  | { status: "pending"; taskId: string; subtaskId?: string; appendToken?: string }
-  | { status: "closed"; taskId: string; subtaskId?: string; reason: string; appendToken?: string };
+  | { status: "answered"; taskId: string; subtaskId?: string; answers: Answer[]; replies?: ReplyView[]; undecryptable?: number; appendToken?: string }
+  | { status: "pending"; taskId: string; subtaskId?: string; replies?: ReplyView[]; appendToken?: string }
+  | { status: "closed"; taskId: string; subtaskId?: string; reason: string; replies?: ReplyView[]; appendToken?: string };
 
 /** One instance's answer state inside a group outcome. */
 export type InstanceResult =
-  | { status: "answered"; answers: Answer[] }
-  | { status: "pending" }
+  | { status: "answered"; answers: Answer[]; replies?: ReplyView[] }
+  | { status: "pending"; replies?: ReplyView[] }
   | { status: "closed"; reason: string };
 
 /** A send in independent mode (the default): one task per recipient, tied by
@@ -328,7 +346,7 @@ export class Simplepush {
         const still: string[] = [];
         for (const taskId of pending) {
           const outcome = await this.getTaskAnswer(taskId);
-          if (outcome.status === "answered") results.set(taskId, { status: "answered", answers: outcome.answers });
+          if (outcome.status === "answered") results.set(taskId, { status: "answered", answers: outcome.answers, ...(outcome.replies !== undefined ? { replies: outcome.replies } : {}) });
           else if (outcome.status === "closed") results.set(taskId, { status: "closed", reason: outcome.reason });
           else still.push(taskId);
         }
@@ -434,14 +452,31 @@ export class Simplepush {
 }
 
 export function taskOutcome(p: TaskPayloadWire | SubtaskPayloadWire, ids: { taskId: string; subtaskId?: string }, undecryptable: number): AskOutcome {
+  const replies = (p.replies ?? []).map(replyOf);
+  const withReplies = replies.length > 0 ? { replies } : {};
+  const answeredByReply = (p.inputs ?? []).length === 0 && replies.length > 0;
   switch (p.status) {
     case "completed":
-      return { status: "answered", ...ids, answers: (p.uploads ?? []).map(answerOf), ...(undecryptable > 0 ? { undecryptable } : {}) };
+      return { status: "answered", ...ids, answers: (p.uploads ?? []).map(answerOf), ...withReplies, ...(undecryptable > 0 ? { undecryptable } : {}) };
     case "pending":
-      return { status: "pending", ...ids };
+      return answeredByReply
+        ? { status: "answered", ...ids, answers: [], replies, ...(undecryptable > 0 ? { undecryptable } : {}) }
+        : { status: "pending", ...ids, ...withReplies };
     default:
-      return { status: "closed", ...ids, reason: p.status };
+      return { status: "closed", ...ids, reason: p.status, ...withReplies };
   }
+}
+
+function replyOf(r: ReplyWire): ReplyView {
+  return {
+    id: r.id,
+    by: person({ publicId: r.authorPublicUserId }),
+    createdAt: r.createdAt,
+    ...(r.body !== undefined ? { text: r.body.value } : {}),
+    ...(r.photo !== undefined ? { photo: fileRef(r.photo) } : {}),
+    ...(r.file !== undefined ? { file: fileRef(r.file) } : {}),
+    ...(r.audio !== undefined ? { audio: { ...fileRef(r.audio), durationSeconds: r.audio.durationSeconds } } : {}),
+  };
 }
 
 /** Flattens an answer record (a task upload or a notification reply) to kind + value. */

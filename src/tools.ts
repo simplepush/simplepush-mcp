@@ -470,9 +470,12 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       title: "Get the answer to an earlier task",
       description:
         "Check whether a task sent with send_task, or a subtask added with append_subtask, has been answered. " +
-        "Pass exactly one of task_id or subtask_id. Returns the answer, or pending if the person has not replied " +
-        "yet; for a subtask the result also names its parent task. A photo, voice or file answer carries its inputId " +
-        "for download_attachment. For the whole task including every subtask, use get_task.",
+        "Pass exactly one of task_id or subtask_id. A task is answered by its inputs or, when it has none, by its " +
+        "reply thread: the first reply answers it. The result lists `answers` (input answers) and `replies` (the " +
+        "thread: author, time, text, files), or pending if nothing has come in yet; a task with inputs AND a thread " +
+        "stays pending until the inputs are done but still lists its replies. For a subtask the result also names " +
+        "its parent task. A photo, voice or file answer carries its inputId, a reply file its id, for " +
+        "download_attachment. For the whole task including every subtask, use get_task.",
       inputSchema: z
         .object({
           task_id: z.string().min(1).optional().describe("The tsk_ id returned by send_task."),

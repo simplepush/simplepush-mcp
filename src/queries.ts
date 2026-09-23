@@ -15,9 +15,9 @@ import { decryptEvent, decryptSubmission, decryptTaskPayload, decryptTaskSummary
 
 /** A person as every tool names one: the stable `usr_` handle to filter or
  * cross-reference by, plus the display name when there is one. */
-type Person = { publicId: string; name?: string };
+export type Person = { publicId: string; name?: string };
 
-type FileRef = { id: string; contentType?: string; size?: number; filename?: string };
+export type FileRef = { id: string; contentType?: string; size?: number; filename?: string };
 
 /** The tail every page result carries: the window start when the tool chose
  * it, the cursor to continue with, and the ciphertext note. */
@@ -127,7 +127,7 @@ function trim(value: unknown): unknown {
   return value;
 }
 
-function person(p: { publicId: string; name?: string }): Person {
+export function person(p: { publicId: string; name?: string }): Person {
   return { publicId: p.publicId, ...(p.name !== undefined ? { name: p.name } : {}) };
 }
 
@@ -364,7 +364,7 @@ export async function searchKnowledge(sp: Simplepush, args: SearchArgs): Promise
   };
 }
 
-function fileRef(f: SubmissionFileWire): FileRef {
+export function fileRef(f: SubmissionFileWire): FileRef {
   return {
     id: f.id,
     ...(f.contentType !== undefined ? { contentType: f.contentType } : {}),
