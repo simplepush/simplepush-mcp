@@ -78,7 +78,7 @@ type SearchHitView = {
   kind: SearchKind;
   id: string;
   title?: string;
-  by?: string;
+  by?: Person;
   createdAt: string;
   snippet?: string;
   location?: { latitude: number; longitude: number };
@@ -351,7 +351,7 @@ export async function searchKnowledge(sp: Simplepush, args: SearchArgs): Promise
       kind: h.kind,
       id: h.ref,
       ...(h.title !== undefined ? { title: h.title } : {}),
-      ...(h.actor !== undefined ? { by: h.actor } : {}),
+      ...(h.actor !== undefined ? { by: person(h.actor) } : {}),
       createdAt: h.createdAt,
       ...(h.snippet !== undefined ? { snippet: h.snippet } : {}),
       ...(h.location !== undefined
