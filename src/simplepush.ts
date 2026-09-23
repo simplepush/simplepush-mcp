@@ -57,9 +57,9 @@ export type Answer = {
   durationSeconds?: number;
 };
 
-/** One message on a task's reply thread. `by` is the author's handle only:
- * the stored reply carries no name. Files carry the rfl_ id
- * download_attachment takes as `file_id`. */
+/** One message on a task's reply thread. `by` is the author's handle plus
+ * the name recorded at reply time, when there was one. Files carry the rfl_
+ * id download_attachment takes as `file_id`. */
 export type ReplyView = {
   id: string;
   by: Person;
@@ -470,7 +470,7 @@ export function taskOutcome(p: TaskPayloadWire | SubtaskPayloadWire, ids: { task
 function replyOf(r: ReplyWire): ReplyView {
   return {
     id: r.id,
-    by: person({ publicId: r.authorPublicUserId }),
+    by: person({ publicId: r.authorPublicUserId, ...(r.authorName !== undefined ? { name: r.authorName } : {}) }),
     createdAt: r.createdAt,
     ...(r.body !== undefined ? { text: r.body.value } : {}),
     ...(r.photo !== undefined ? { photo: fileRef(r.photo) } : {}),
