@@ -1,6 +1,21 @@
 import { Client, Keyring, OrgClient, decryptNotificationPayload, decryptTaskPayload } from "@simplepush/sdk";
 import { importKey } from "@simplepush/sdk";
-import type { CancelReason, DerivedKey, EncryptionMarker, Input, KeysConfig, NotificationInput, PersonalKeyInput, ReplyMode, SendOptions, SendSubtaskOptions } from "@simplepush/sdk";
+import type {
+  CancelReason,
+  DerivedKey,
+  EncryptionMarker,
+  Input,
+  KeysConfig,
+  NotificationInput,
+  NotificationReplyWire,
+  PersonalKeyInput,
+  ReplyMode,
+  SendOptions,
+  SendSubtaskOptions,
+  SubtaskPayloadWire,
+  TaskPayloadWire,
+  UploadWire,
+} from "@simplepush/sdk";
 import { isSubtaskGroupResponse } from "@simplepush/sdk";
 
 /** Who this server acts as.
@@ -395,24 +410,12 @@ export class Simplepush {
   /** Resolves a task or subtask by id — a cheap point read, no subscription —
    * and decrypts the answers the payload carries. */
   async getTaskAnswer(id: string): Promise<AskOutcome> {
-    const subtask = id.startsWith("sub_");
-    const payload = subtask ? await this.client.getSubtask(id) : await this.client.getTask(id);
-    const { value, undecryptable } = await decryptTaskPayload(payload, await this.keyring());
-    const p = value as { status: string; parentTaskId?: string; uploads?: Record<string, unknown>[] };
-    const ids = subtask ? { taskId: p.parentTaskId ?? "", subtaskId: id } : { taskId: id };
-    switch (p.status) {
-      case "completed":
-        return {
-          status: "answered",
-          ...ids,
-          answers: (p.uploads ?? []).map(answerOf),
-          ...(undecryptable > 0 ? { undecryptable } : {}),
-        };
-      case "pending":
-        return { status: "pending", ...ids };
-      default:
-        return { status: "closed", ...ids, reason: p.status };
+    if (id.startsWith("sub_")) {
+      const { value, undecryptable } = await decryptTaskPayload(await this.client.getSubtask(id), await this.keyring());
+      return taskOutcome(value, { taskId: value.parentTaskId, subtaskId: id }, undecryptable);
     }
+    const { value, undecryptable } = await decryptTaskPayload(await this.client.getTask(id), await this.keyring());
+    return taskOutcome(value, { taskId: id }, undecryptable);
   }
 
   /** Resolves a notification by id — the notification twin of getTaskAnswer.
@@ -430,20 +433,41 @@ export class Simplepush {
 
 }
 
-/** Flattens an answer record (upload or notification reply) to kind + value. */
-function answerOf(r: Record<string, unknown>): Answer {
-  if (r.type === "file") {
-    return {
-      kind: "file",
-      inputId: String(r.inputId),
-      ...(typeof r.filename === "string" ? { filename: r.filename } : {}),
-      ...(typeof r.contentType === "string" ? { contentType: r.contentType } : {}),
-      ...(typeof r.size === "number" ? { size: r.size } : {}),
-      ...(typeof r.durationSeconds === "number" ? { durationSeconds: r.durationSeconds } : {}),
-    };
+export function taskOutcome(p: TaskPayloadWire | SubtaskPayloadWire, ids: { taskId: string; subtaskId?: string }, undecryptable: number): AskOutcome {
+  switch (p.status) {
+    case "completed":
+      return { status: "answered", ...ids, answers: (p.uploads ?? []).map(answerOf), ...(undecryptable > 0 ? { undecryptable } : {}) };
+    case "pending":
+      return { status: "pending", ...ids };
+    default:
+      return { status: "closed", ...ids, reason: p.status };
   }
-  const raw = r.value ?? r.selectedValue ?? r.selectedKey ?? (Array.isArray(r.selectedValues) ? r.selectedValues.join(", ") : undefined);
-  return typeof raw === "string" ? { kind: String(r.type), value: raw } : { kind: String(r.type) };
+}
+
+/** Flattens an answer record (a task upload or a notification reply) to kind + value. */
+function answerOf(r: UploadWire | NotificationReplyWire): Answer {
+  switch (r.type) {
+    case "file":
+      return {
+        kind: "file",
+        inputId: r.inputId,
+        ...(r.filename !== undefined ? { filename: r.filename } : {}),
+        contentType: r.contentType,
+        size: r.size,
+        ...(r.durationSeconds !== undefined ? { durationSeconds: r.durationSeconds } : {}),
+      };
+    case "text":
+    case "slider":
+      return { kind: r.type, value: r.value };
+    case "choice":
+      return { kind: "choice", value: r.selectedValue };
+    case "multiChoice":
+      return { kind: "multiChoice", value: r.selectedValues.join(", ") };
+    case "actions":
+      return { kind: "actions", value: r.selectedKey };
+    case "location":
+      return { kind: "location" };
+  }
 }
 
 /** HTTP failures as sentences a model can act on rather than bare statuses. */
