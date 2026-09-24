@@ -5,6 +5,7 @@ import type {
   DerivedKey,
   EncryptionMarker,
   Input,
+  InputWire,
   KeysConfig,
   NotificationInput,
   NotificationReplyWire,
@@ -46,8 +47,14 @@ export type SimplepushOptions = {
 /** One human's answer to one input, flattened to something a model can read.
  * `value` is plaintext where this server holds the key, else the ciphertext;
  * the outcome's `undecryptable` count says how many stayed sealed. */
+/** One answer, keyed to the input it answers: `kind` is the input's kind
+ * (text, choice, multiChoice, actions, slider, photo, voiceRecording, file,
+ * location) and `description` the input's own description, the prompt the
+ * recipient answered, when the input is known. A notification reply carries
+ * neither. */
 export type Answer = {
   kind: string;
+  description?: string;
   value?: string;
   /** File answers: the inp_ id download_attachment takes as `file_id` with kind `input`. */
   inputId?: string;
@@ -456,9 +463,17 @@ export function taskOutcome(p: TaskPayloadWire | SubtaskPayloadWire, ids: { task
   const withReplies = replies.length > 0 ? { replies } : {};
   const closedAt = p.closedAt !== undefined ? { closedAt: p.closedAt } : {};
   const answeredByReply = p.inputs.length === 0 && replies.length > 0;
+  const inputs = new Map(p.inputs.map((i) => [i.id, i]));
   switch (p.status) {
     case "completed":
-      return { status: "answered", ...ids, answers: p.uploads.map(answerOf), ...withReplies, ...closedAt, ...(undecryptable > 0 ? { undecryptable } : {}) };
+      return {
+        status: "answered",
+        ...ids,
+        answers: p.uploads.map((u) => answerOf(u, inputs.get(u.inputId))),
+        ...withReplies,
+        ...closedAt,
+        ...(undecryptable > 0 ? { undecryptable } : {}),
+      };
     case "pending":
       return answeredByReply
         ? { status: "answered", ...ids, answers: [], replies, ...(undecryptable > 0 ? { undecryptable } : {}) }
@@ -480,12 +495,16 @@ function replyOf(r: ReplyWire): ReplyView {
   };
 }
 
-/** Flattens an answer record (a task upload or a notification reply) to kind + value. */
-function answerOf(r: UploadWire | NotificationReplyWire): Answer {
+/** Flattens an answer record (a task upload or a notification reply) to kind +
+ * value. A stored file upload is one wire shape for photo, voice and file
+ * answers, so its kind comes from the input it answers. */
+function answerOf(r: UploadWire | NotificationReplyWire, input?: InputWire): Answer {
+  const description = input?.description !== undefined ? { description: input.description } : {};
   switch (r.type) {
     case "file":
       return {
-        kind: "file",
+        kind: input?.type === "photo" || input?.type === "voiceRecording" ? input.type : "file",
+        ...description,
         inputId: r.inputId,
         ...(r.filename !== undefined ? { filename: r.filename } : {}),
         contentType: r.contentType,
@@ -494,15 +513,15 @@ function answerOf(r: UploadWire | NotificationReplyWire): Answer {
       };
     case "text":
     case "slider":
-      return { kind: r.type, value: r.value };
+      return { kind: r.type, ...description, value: r.value };
     case "choice":
-      return { kind: "choice", value: r.selectedValue };
+      return { kind: "choice", ...description, value: r.selectedValue };
     case "multiChoice":
-      return { kind: "multiChoice", value: r.selectedValues.join(", ") };
+      return { kind: "multiChoice", ...description, value: r.selectedValues.join(", ") };
     case "actions":
-      return { kind: "actions", value: r.selectedKey };
+      return { kind: "actions", ...description, value: r.selectedKey };
     case "location":
-      return { kind: "location" };
+      return { kind: "location", ...description };
   }
 }
 

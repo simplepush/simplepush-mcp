@@ -472,7 +472,8 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
         "Check whether a task sent with send_task, or a subtask added with append_subtask, has been answered. " +
         "Pass exactly one of task_id or subtask_id. A task is answered by its inputs or, when it has none, by its " +
         "reply thread: the first reply answers it. The result lists `answers` (input answers) and `replies` (the " +
-        "thread: author, time, text, files), or pending if nothing has come in yet; a task with inputs AND a thread " +
+        "thread: author, time, text, files), or pending if nothing has come in yet. Each answer names its input's kind " +
+        "(text, choice, photo, voiceRecording, file, …) and carries the input's description. A task with inputs AND a thread " +
         "stays pending until the inputs are done but still lists its replies. For a subtask the result also names " +
         "its parent task. A photo, voice or file answer carries its inputId, a reply file its id, for " +
         "download_attachment. For the whole task including every subtask, use get_task.",
