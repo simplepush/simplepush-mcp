@@ -455,10 +455,10 @@ export function taskOutcome(p: TaskPayloadWire | SubtaskPayloadWire, ids: { task
   const replies = (p.replies ?? []).map(replyOf);
   const withReplies = replies.length > 0 ? { replies } : {};
   const closedAt = p.closedAt !== undefined ? { closedAt: p.closedAt } : {};
-  const answeredByReply = (p.inputs ?? []).length === 0 && replies.length > 0;
+  const answeredByReply = p.inputs.length === 0 && replies.length > 0;
   switch (p.status) {
     case "completed":
-      return { status: "answered", ...ids, answers: (p.uploads ?? []).map(answerOf), ...withReplies, ...closedAt, ...(undecryptable > 0 ? { undecryptable } : {}) };
+      return { status: "answered", ...ids, answers: p.uploads.map(answerOf), ...withReplies, ...closedAt, ...(undecryptable > 0 ? { undecryptable } : {}) };
     case "pending":
       return answeredByReply
         ? { status: "answered", ...ids, answers: [], replies, ...(undecryptable > 0 ? { undecryptable } : {}) }
