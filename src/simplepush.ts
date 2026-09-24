@@ -81,9 +81,9 @@ export type NotificationOutcome =
  * thread: the first reply answers it. A task with inputs AND a thread stays
  * pending until the inputs are done; its replies are listed either way. */
 export type AskOutcome =
-  | { status: "answered"; taskId: string; subtaskId?: string; answers: Answer[]; replies?: ReplyView[]; undecryptable?: number; appendToken?: string }
+  | { status: "answered"; taskId: string; subtaskId?: string; answers: Answer[]; replies?: ReplyView[]; closedAt?: string; undecryptable?: number; appendToken?: string }
   | { status: "pending"; taskId: string; subtaskId?: string; replies?: ReplyView[]; appendToken?: string }
-  | { status: "closed"; taskId: string; subtaskId?: string; reason: string; replies?: ReplyView[]; appendToken?: string };
+  | { status: "closed"; taskId: string; subtaskId?: string; reason: string; closedAt?: string; replies?: ReplyView[]; appendToken?: string };
 
 /** One instance's answer state inside a group outcome. */
 export type InstanceResult =
@@ -454,16 +454,17 @@ export class Simplepush {
 export function taskOutcome(p: TaskPayloadWire | SubtaskPayloadWire, ids: { taskId: string; subtaskId?: string }, undecryptable: number): AskOutcome {
   const replies = (p.replies ?? []).map(replyOf);
   const withReplies = replies.length > 0 ? { replies } : {};
+  const closedAt = p.closedAt !== undefined ? { closedAt: p.closedAt } : {};
   const answeredByReply = (p.inputs ?? []).length === 0 && replies.length > 0;
   switch (p.status) {
     case "completed":
-      return { status: "answered", ...ids, answers: (p.uploads ?? []).map(answerOf), ...withReplies, ...(undecryptable > 0 ? { undecryptable } : {}) };
+      return { status: "answered", ...ids, answers: (p.uploads ?? []).map(answerOf), ...withReplies, ...closedAt, ...(undecryptable > 0 ? { undecryptable } : {}) };
     case "pending":
       return answeredByReply
         ? { status: "answered", ...ids, answers: [], replies, ...(undecryptable > 0 ? { undecryptable } : {}) }
         : { status: "pending", ...ids, ...withReplies };
     default:
-      return { status: "closed", ...ids, reason: p.status, ...withReplies };
+      return { status: "closed", ...ids, reason: p.status, ...closedAt, ...withReplies };
   }
 }
 

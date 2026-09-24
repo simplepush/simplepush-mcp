@@ -561,7 +561,7 @@ export function buildServer(sp: Simplepush, config: SharedConfig, granted?: Read
       description:
         "Answers 'which tasks are open, expired, declined or done, and who has them'. Status only — it never shows what " +
         "people answered or reported; for that use get_task, query_events or get_activity. One page of compact summaries, " +
-        "newest first: id, title, tag, topic, status, recipients, input kinds and reply mode (what sort of answer it expects), " +
+        "newest first: id, title, tag, topic, status, when it closed (closedAt, for completed, canceled, declined or expired), recipients, input kinds and reply mode (what sort of answer it expects), " +
         "attachment kinds (file, link), sent " +
         "time, and a per-status count of the task's subtasks (checklist items). Filter by status, time window, topic, member, or group.",
       inputSchema: z.object({

@@ -33,6 +33,8 @@ type TaskView = {
   topic?: string;
   createdAt: string;
   expiresAt?: string;
+  /** When the task left pending, for any terminal state. */
+  closedAt?: string;
   recipients: Person[];
   inputs?: string[];
   attachments?: string[];
@@ -159,6 +161,7 @@ async function shapeSummary(sp: Simplepush, t: TaskSummary): Promise<{ summary: 
     ...(t.topic !== undefined ? { topic: t.topic } : {}),
     createdAt: t.createdAt,
     ...(t.expiresAt !== undefined ? { expiresAt: t.expiresAt } : {}),
+    ...(t.closedAt !== undefined ? { closedAt: t.closedAt } : {}),
     recipients: recipientRefs(t.recipients),
     ...(t.inputs.length > 0 ? { inputs: t.inputs } : {}),
     ...(t.attachments.length > 0 ? { attachments: t.attachments } : {}),
