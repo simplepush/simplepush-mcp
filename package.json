@@ -1,6 +1,6 @@
 {
   "name": "@simplepush/mcp",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "MCP server for Simplepush. Agents send tasks and notifications to people's phones, wait for the answers, and query the record of what came back: tasks, answers, replies, and submissions.",
   "mcpName": "sh.simplepu/mcp",
   "license": "MIT OR Apache-2.0",
